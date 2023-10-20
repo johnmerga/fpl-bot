@@ -1,0 +1,96 @@
+import config from "./config";
+// import { Command } from "./g.types";
+import TelegramBot, { Message, KeyboardButton } from "node-telegram-bot-api";
+import { createUser, userExist } from "./service/dal";
+import "./db"
+import { IUser } from "./service/interface";
+import { ChatType, Command, HelpDescription } from "./g.types";
+import { isAdmin } from "./service/service";
+
+const bot = new TelegramBot(config.TELEGRAM_API_KEY, { polling: true })
+bot.setMyCommands([
+	{
+		command: Command.start,
+		description: `start bot`
+	},
+	{
+		command: Command.linkGroup,
+		description: `link group to bot`
+	},
+	{
+		command: Command.help,
+		description: `help`
+	},
+	{
+		command: Command.score,
+		description: `show score`
+	}
+])
+
+bot.onText(/start/, async (msg: Message) => {
+	try {
+		const cId = msg.chat.id
+		//const uName = msg.chat.username
+		const user = await userExist(msg)
+		if (!user) {
+			bot.sendMessage(cId, `you are new user. ...loading`)
+			const newUser: IUser = {
+				userName: msg.chat.username ? msg.chat.username : "no username",
+				telegramUserId: msg.chat.id,
+			}
+			const created = await createUser(newUser)
+			const replay = `User: ${created.userName}, \nID: ${created.telegramUserId} \nadd me to group so i can help you update your league score.`
+			bot.sendMessage(msg.chat.id, replay)
+			return
+		} else {
+			bot.sendMessage(cId, `you already have an account`)
+			return
+		}
+
+	} catch (error) {
+		if (error instanceof Error) {
+			bot.sendMessage(msg.chat.id, error.message)
+		} else {
+			bot.sendMessage(msg.chat.id, `Server error`)
+		}
+
+	}
+})
+
+bot.onText(/linkgroup/, async (msg: Message) => {
+	try {
+		const chat = await bot.getChat(msg.chat.id)
+		const admin = await bot.getChatAdministrators(msg.chat.id)
+		const userId = msg.from?.id
+		if (msg.chat.type !== ChatType.GROUP) {
+			bot.sendMessage(msg.chat.id, `Please use this command ${Command.linkGroup} in group`)
+			return
+		} else if (msg.chat.type == ChatType.GROUP) {
+			if (isAdmin(admin, userId ? userId : 0)) {
+				bot.sendMessage(msg.chat.id, `Only group admins can send this command`)
+				return
+			}
+			const replay = `you group info added.\ngroup chat id: ${chat.id} \nuserId: ${userId}`
+			bot.sendMessage(msg.chat.id, replay)
+			return
+		}
+	} catch (error) {
+
+	}
+})
+
+bot.onText(/help/, async (msg: Message) => {
+	try {
+		const helpOptions: KeyboardButton[][] = [
+			[{ text: HelpDescription.addleague }],{
+		]
+
+		bot.sendMessage(msg.chat.id, "FAQ", {
+			reply_markup: {
+				keyboard: helpOptions
+			}
+		})
+	} catch (error) {
+	}
+})
+
